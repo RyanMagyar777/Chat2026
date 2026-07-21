@@ -4,185 +4,256 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Random Video Chat</title>
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script src="https://unpkg.com/mqtt@5.3.4/dist/mqtt.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
-    body { background: #0f172a; color: #f8fafc; height: 100vh; display: flex; flex-direction: column; padding: 16px; gap: 16px; }
-    
-    header { display: flex; justify-content: space-between; align-items: center; background: #1e293b; padding: 12px 16px; border-radius: 8px; }
-    .status { font-size: 14px; font-weight: 500; color: #38bdf8; }
-    button { padding: 8px 16px; border-radius: 6px; border: none; background: #2563eb; color: #fff; font-weight: 600; cursor: pointer; transition: background 0.2s; }
-    button:hover { background: #1d4ed8; }
-    button:disabled { background: #475569; cursor: not-allowed; }
-    
-    .main-container { display: flex; flex: 1; gap: 16px; overflow: hidden; }
-    .video-section { flex: 2; display: flex; flex-direction: column; gap: 12px; }
-    .video-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; flex: 1; background: #020617; border-radius: 8px; padding: 12px; }
-    .video-card { display: flex; flex-direction: column; gap: 6px; height: 100%; position: relative; }
-    video { width: 100%; flex: 1; object-fit: cover; background: #1e293b; border-radius: 6px; }
-    .label { font-size: 12px; color: #94a3b8; }
+    body { background: #0f172a; color: #f8fafc; height: 100vh; display: flex; flex-direction: column; padding: 12px; gap: 12px; }
 
-    .chat-section { flex: 1; display: flex; flex-direction: column; background: #1e293b; border-radius: 8px; padding: 12px; gap: 10px; }
-    .chat-messages { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 4px; }
-    .msg { padding: 8px 12px; border-radius: 6px; max-width: 80%; font-size: 14px; word-break: break-word; }
+    header { display: flex; align-items: center; justify-content: space-between; background: #1e293b; padding: 12px 16px; border-radius: 8px; }
+    .status-badge { font-size: 14px; font-weight: 600; color: #38bdf8; }
+    
+    .btn-next { background: #22c55e; color: #fff; border: none; padding: 10px 20px; font-size: 15px; font-weight: 700; border-radius: 6px; cursor: pointer; transition: background 0.2s; }
+    .btn-next:hover { background: #16a34a; }
+
+    .main-grid { display: flex; flex: 1; gap: 12px; overflow: hidden; }
+    .video-container { flex: 2; display: grid; grid-template-rows: 1fr 1fr; gap: 12px; }
+    .video-card { position: relative; background: #020617; border-radius: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+    video { width: 100%; height: 100%; object-fit: cover; }
+    .video-label { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.6); padding: 4px 8px; border-radius: 4px; font-size: 12px; }
+
+    .chat-container { flex: 1; background: #1e293b; border-radius: 8px; display: flex; flex-direction: column; padding: 12px; gap: 10px; }
+    .chat-messages { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+    .msg { padding: 8px 12px; border-radius: 6px; font-size: 14px; max-width: 85%; word-break: break-word; }
     .msg.me { background: #2563eb; align-self: flex-end; }
     .msg.them { background: #334155; align-self: flex-start; }
-    .chat-input { display: flex; gap: 8px; }
-    .chat-input input { flex: 1; padding: 8px 12px; border-radius: 6px; border: 1px solid #334155; background: #0f172a; color: #fff; outline: none; }
+    .msg.system { background: transparent; color: #94a3b8; align-self: center; font-size: 12px; font-style: italic; }
 
-    @media (max-width: 768px) {
-      .main-container { flex-direction: column; }
-      .video-grid { grid-template-columns: 1fr; }
+    .chat-input { display: flex; gap: 8px; }
+    input[type="text"] { flex: 1; padding: 10px; border-radius: 6px; border: 1px solid #334155; background: #0f172a; color: #fff; outline: none; }
+    .btn-send { background: #2563eb; color: #fff; border: none; padding: 10px 16px; border-radius: 6px; font-weight: 600; cursor: pointer; }
+
+    @media (min-width: 768px) {
+      .video-container { grid-template-rows: none; grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 600px) {
+      .main-grid { flex-direction: column; }
     }
   </style>
 </head>
 <body>
 
   <header>
-    <div class="status" id="status-text">Status: Requesting camera...</div>
-    <button id="next-btn" disabled>Next Partner ⏭</button>
+    <div>
+      <span style="color: #94a3b8; font-size: 14px;">Status: </span>
+      <span id="status" class="status-badge">Initializing camera...</span>
+    </div>
+    <button id="next-btn" class="btn-next">Next Stranger ➔</button>
   </header>
 
-  <div class="main-container">
-    <div class="video-section">
-      <div class="video-grid">
-        <div class="video-card">
-          <span class="label">You</span>
-          <video id="local-video" autoplay muted playsinline></video>
-        </div>
-        <div class="video-card">
-          <span class="label">Partner</span>
-          <video id="remote-video" autoplay playsinline></video>
-        </div>
+  <div class="main-grid">
+    <div class="video-container">
+      <div class="video-card">
+        <span class="video-label">You</span>
+        <video id="local-video" autoplay muted playsinline></video>
+      </div>
+      <div class="video-card">
+        <span class="video-label">Stranger</span>
+        <video id="remote-video" autoplay playsinline></video>
       </div>
     </div>
 
-    <div class="chat-section">
-      <h3 style="font-size: 16px; border-bottom: 1px solid #334155; padding-bottom: 8px;">Text Chat</h3>
-      <div class="chat-messages" id="messages"></div>
+    <div class="chat-container">
+      <h3 style="font-size: 15px; border-bottom: 1px solid #334155; padding-bottom: 8px;">Text Chat</h3>
+      <div id="messages" class="chat-messages"></div>
       <div class="chat-input">
-        <input type="text" id="msg-input" placeholder="Type a message..." disabled>
-        <button id="send-btn" disabled>Send</button>
+        <input type="text" id="msg-input" placeholder="Say hello..." disabled>
+        <button id="send-btn" class="btn-send" disabled>Send</button>
       </div>
     </div>
   </div>
 
-  <script type="module">
-    import { joinRoom, selfId } from 'https://cdn.jsdelivr.net/npm/trystero@0.18.0/nostr.min.js';
-
-    const config = { appId: 'auto-matchmaking-video-chat' };
-    const LOBBY_ROOM = 'global-public-lobby';
-
+  <script>
+    const TOPIC = 'global-random-chat-v1/matchmaker';
+    
     let localStream = null;
-    let currentRoom = null;
-    let lobbyRoom = null;
-    let sendMsg = null;
+    let peer = null;
+    let myId = null;
+    let mqttClient = null;
+    let activeCall = null;
+    let activeConn = null;
+    let isConnected = false;
 
-    const statusText = document.getElementById('status-text');
-    const nextBtn = document.getElementById('next-btn');
+    const statusEl = document.getElementById('status');
     const localVideo = document.getElementById('local-video');
     const remoteVideo = document.getElementById('remote-video');
     const messagesEl = document.getElementById('messages');
     const msgInput = document.getElementById('msg-input');
     const sendBtn = document.getElementById('send-btn');
+    const nextBtn = document.getElementById('next-btn');
 
-    async function init() {
+    // 1. Initialize Camera & Mic
+    async function initCamera() {
       try {
         localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         localVideo.srcObject = localStream;
-        nextBtn.disabled = false;
-        joinLobby();
+        initPeer();
       } catch (err) {
-        statusText.textContent = 'Status: Camera/Mic access required!';
+        console.error(err);
+        statusEl.textContent = 'Camera blocked! Ensure site is on HTTPS.';
+        appendSystemMessage('Camera/Microphone permission failed. Please check browser settings.');
       }
     }
 
-    function joinLobby() {
-      resetMatch();
-      statusText.textContent = 'Status: Searching for partner...';
+    // 2. Setup PeerJS
+    function initPeer() {
+      statusEl.textContent = 'Connecting to network...';
+      peer = new Peer();
 
-      lobbyRoom = joinRoom(config, LOBBY_ROOM);
-      const [sendInvite, getInvite] = lobbyRoom.makeAction('invite');
+      peer.on('open', id => {
+        myId = id;
+        initMatchmaker();
+      });
+
+      peer.on('call', call => {
+        if (isConnected) return call.close();
+        acceptIncomingCall(call);
+      });
+
+      peer.on('connection', conn => {
+        if (isConnected && activeConn !== conn) return;
+        setupDataConnection(conn);
+      });
+
+      peer.on('error', err => console.error('Peer error:', err));
+    }
+
+    // 3. Setup MQTT Matchmaking Broker
+    function initMatchmaker() {
+      mqttClient = mqtt.connect('wss://broker.hivemq.com:8884/mqtt');
+
+      mqttClient.on('connect', () => {
+        mqttClient.subscribe(TOPIC);
+        findMatch();
+      });
+
+      mqttClient.on('message', (topic, message) => {
+        if (isConnected) return;
+        try {
+          const data = JSON.parse(message.toString());
+          if (data.action === 'looking' && data.id !== myId) {
+            connectToStranger(data.id);
+          }
+        } catch(e) {}
+      });
+    }
+
+    // 4. Matchmaking Logic
+    function findMatch() {
+      disconnectCurrent();
+      statusEl.textContent = 'Searching for a stranger...';
+      appendSystemMessage('Searching for someone online...');
       
-      lobbyRoom.onPeerJoin = (peerId) => {
-        if (selfId > peerId) {
-          const privateRoomId = `room-${selfId}-${peerId}-${Date.now()}`;
-          sendInvite(privateRoomId, peerId);
-          connectToPrivateRoom(privateRoomId);
-        }
-      };
-
-      getInvite((privateRoomId) => {
-        connectToPrivateRoom(privateRoomId);
-      });
+      if (mqttClient && mqttClient.connected) {
+        mqttClient.publish(TOPIC, JSON.stringify({ action: 'looking', id: myId }));
+      }
     }
 
-    function connectToPrivateRoom(roomId) {
-      if (lobbyRoom) {
-        lobbyRoom.leave();
-        lobbyRoom = null;
-      }
+    function connectToStranger(targetId) {
+      if (isConnected) return;
+      isConnected = true;
+      statusEl.textContent = 'Connecting...';
 
-      statusText.textContent = 'Status: Connected!';
-      enableChat(true);
+      // Connect Chat
+      const conn = peer.connect(targetId);
+      setupDataConnection(conn);
 
-      currentRoom = joinRoom(config, roomId);
-      currentRoom.addStream(localStream);
+      // Call Video
+      const call = peer.call(targetId, localStream);
+      setupCall(call);
+    }
 
-      currentRoom.onPeerStream((stream) => {
+    function acceptIncomingCall(call) {
+      isConnected = true;
+      call.answer(localStream);
+      setupCall(call);
+    }
+
+    function setupCall(call) {
+      activeCall = call;
+      call.on('stream', stream => {
         remoteVideo.srcObject = stream;
+        statusEl.textContent = 'Connected to Stranger!';
+        appendSystemMessage('Connected! Say hi.');
+        toggleChatInputs(true);
       });
-
-      currentRoom.onPeerLeave = () => {
-        statusText.textContent = 'Status: Partner disconnected.';
-        remoteVideo.srcObject = null;
-        enableChat(false);
-      };
-
-      const [sendMessageAction, receiveMessage] = currentRoom.makeAction('chat');
-      sendMsg = sendMessageAction;
-
-      receiveMessage((data) => {
-        appendMessage(data, 'them');
-      });
+      call.on('close', () => resetPeerState('Stranger disconnected.'));
+      call.on('error', () => resetPeerState('Connection error.'));
     }
 
-    function resetMatch() {
-      if (currentRoom) {
-        currentRoom.leave();
-        currentRoom = null;
-      }
-      remoteVideo.srcObject = null;
-      sendMsg = null;
-      messagesEl.innerHTML = '';
-      enableChat(false);
+    function setupDataConnection(conn) {
+      activeConn = conn;
+      conn.on('data', data => appendMessage(data, 'them'));
+      conn.on('close', () => resetPeerState('Stranger left chat.'));
     }
 
-    function enableChat(enabled) {
-      msgInput.disabled = !enabled;
-      sendBtn.disabled = !enabled;
-    }
+    // 5. Actions & Messaging
+    nextBtn.addEventListener('click', findMatch);
 
-    nextBtn.addEventListener('click', joinLobby);
-    sendBtn.addEventListener('click', sendTextMessage);
-    msgInput.addEventListener('keypress', (E) => { if (E.key === 'Enter') sendTextMessage(); });
+    sendBtn.addEventListener('click', sendMessage);
+    msgInput.addEventListener('keypress', E => { if (E.key === 'Enter') sendMessage(); });
 
-    function sendTextMessage() {
+    function sendMessage() {
       const text = msgInput.value.trim();
-      if (!text || !sendMsg) return;
-      sendMsg(text);
+      if (!text || !activeConn) return;
+      activeConn.send(text);
       appendMessage(text, 'me');
       msgInput.value = '';
     }
 
-    function appendMessage(text, type) {
-      const msgDiv = document.createElement('div');
-      msgDiv.classList.add('message', type);
-      msgDiv.textContent = text;
-      messagesEl.appendChild(msgDiv);
+    function disconnectCurrent() {
+      if (activeCall) activeCall.close();
+      if (activeConn) activeConn.close();
+      activeCall = null;
+      activeConn = null;
+      isConnected = false;
+      remoteVideo.srcObject = null;
+      messagesEl.innerHTML = '';
+      toggleChatInputs(false);
+    }
+
+    function resetPeerState(reason) {
+      if (isConnected) {
+        appendSystemMessage(reason);
+        statusEl.textContent = 'Disconnected';
+        toggleChatInputs(false);
+        isConnected = false;
+      }
+    }
+
+    function toggleChatInputs(enabled) {
+      msgInput.disabled = !enabled;
+      sendBtn.disabled = !enabled;
+    }
+
+    function appendMessage(text, sender) {
+      const div = document.createElement('div');
+      div.className = `message ${sender}`;
+      div.textContent = text;
+      messagesEl.appendChild(div);
       messagesEl.scrollTop = messagesEl.scrollHeight;
     }
 
-    init();
+    function appendSystemMessage(text) {
+      const div = document.createElement('div');
+      div.className = 'msg system';
+      div.textContent = text;
+      messagesEl.appendChild(div);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    // Start App
+    initCamera();
   </script>
 </body>
 </html>
