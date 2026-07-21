@@ -3,30 +3,31 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Video & Text Chat App</title>
-  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <title>Random Video Chat</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
-    body { background: #0f172a; color: #f8fafc; display: flex; flex-direction: column; height: 100vh; padding: 16px; gap: 16px; }
+    body { background: #0f172a; color: #f8fafc; height: 100vh; display: flex; flex-direction: column; padding: 16px; gap: 16px; }
     
-    header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; background: #1e293b; padding: 12px 16px; border-radius: 8px; }
-    input, button { padding: 8px 12px; border-radius: 6px; border: 1px solid #334155; background: #0f172a; color: #fff; font-size: 14px; outline: none; }
-    button { background: #2563eb; border: none; cursor: pointer; font-weight: 600; transition: background 0.2S; }
+    header { display: flex; justify-content: space-between; align-items: center; background: #1e293b; padding: 12px 16px; border-radius: 8px; }
+    .status { font-size: 14px; font-weight: 500; color: #38bdf8; }
+    button { padding: 8px 16px; border-radius: 6px; border: none; background: #2563eb; color: #fff; font-weight: 600; cursor: pointer; transition: background 0.2s; }
     button:hover { background: #1d4ed8; }
+    button:disabled { background: #475569; cursor: not-allowed; }
     
     .main-container { display: flex; flex: 1; gap: 16px; overflow: hidden; }
     .video-section { flex: 2; display: flex; flex-direction: column; gap: 12px; }
     .video-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; flex: 1; background: #020617; border-radius: 8px; padding: 12px; }
-    .video-card { display: flex; flex-direction: column; gap: 6px; height: 100%; }
+    .video-card { display: flex; flex-direction: column; gap: 6px; height: 100%; position: relative; }
     video { width: 100%; flex: 1; object-fit: cover; background: #1e293b; border-radius: 6px; }
-    
+    .label { font-size: 12px; color: #94a3b8; }
+
     .chat-section { flex: 1; display: flex; flex-direction: column; background: #1e293b; border-radius: 8px; padding: 12px; gap: 10px; }
     .chat-messages { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 4px; }
     .msg { padding: 8px 12px; border-radius: 6px; max-width: 80%; font-size: 14px; word-break: break-word; }
     .msg.me { background: #2563eb; align-self: flex-end; }
     .msg.them { background: #334155; align-self: flex-start; }
     .chat-input { display: flex; gap: 8px; }
-    .chat-input input { flex: 1; }
+    .chat-input input { flex: 1; padding: 8px 12px; border-radius: 6px; border: 1px solid #334155; background: #0f172a; color: #fff; outline: none; }
 
     @media (max-width: 768px) {
       .main-container { flex-direction: column; }
@@ -37,22 +38,19 @@
 <body>
 
   <header>
-    <div><strong>Your ID:</strong> <span id="my-id" style="color: #38bdf8;">Generating...</span></div>
-    <div style="margin-left: auto; display: flex; gap: 8px;">
-      <input type="text" id="peer-id-input" placeholder="Enter Peer ID to connect">
-      <button id="connect-btn">Connect & Call</button>
-    </div>
+    <div class="status" id="status-text">Status: Requesting camera...</div>
+    <button id="next-btn" disabled>Next Partner ⏭</button>
   </header>
 
   <div class="main-container">
     <div class="video-section">
       <div class="video-grid">
         <div class="video-card">
-          <span style="font-size: 12px; color: #94a3b8;">You</span>
+          <span class="label">You</span>
           <video id="local-video" autoplay muted playsinline></video>
         </div>
         <div class="video-card">
-          <span style="font-size: 12px; color: #94a3b8;">Peer</span>
+          <span class="label">Partner</span>
           <video id="remote-video" autoplay playsinline></video>
         </div>
       </div>
@@ -62,81 +60,116 @@
       <h3 style="font-size: 16px; border-bottom: 1px solid #334155; padding-bottom: 8px;">Text Chat</h3>
       <div class="chat-messages" id="messages"></div>
       <div class="chat-input">
-        <input type="text" id="msg-input" placeholder="Type a message...">
-        <button id="send-btn">Send</button>
+        <input type="text" id="msg-input" placeholder="Type a message..." disabled>
+        <button id="send-btn" disabled>Send</button>
       </div>
     </div>
   </div>
 
-  <script>
-    const peer = new Peer();
-    let localStream;
-    let dataConn;
+  <script type="module">
+    import { joinRoom, selfId } from 'https://cdn.jsdelivr.net/npm/trystero@0.18.0/nostr.min.js';
 
-    const myIdEl = document.getElementById('my-id');
-    const peerIdInput = document.getElementById('peer-id-input');
-    const connectBtn = document.getElementById('connect-btn');
+    const config = { appId: 'auto-matchmaking-video-chat' };
+    const LOBBY_ROOM = 'global-public-lobby';
+
+    let localStream = null;
+    let currentRoom = null;
+    let lobbyRoom = null;
+    let sendMsg = null;
+
+    const statusText = document.getElementById('status-text');
+    const nextBtn = document.getElementById('next-btn');
     const localVideo = document.getElementById('local-video');
     const remoteVideo = document.getElementById('remote-video');
     const messagesEl = document.getElementById('messages');
     const msgInput = document.getElementById('msg-input');
     const sendBtn = document.getElementById('send-btn');
 
-    // 1. Get media access
-    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-      .then(stream => {
-        localStream = stream;
-        localVideo.srcObject = stream;
-      })
-      .catch(err => console.error('Media access error:', err));
-
-    // 2. Retrieve Peer ID
-    peer.on('open', id => {
-      myIdEl.textContent = id;
-    });
-
-    // 3. Handle incoming text connection
-    peer.on('connection', conn => {
-      dataConn = conn;
-      bindChatEvents();
-    });
-
-    // 4. Handle incoming video call
-    peer.on('call', call => {
-      call.answer(localStream);
-      call.on('stream', remoteStream => {
-        remoteVideo.srcObject = remoteStream;
-      });
-    });
-
-    // 5. Initiate outgoing connection
-    connectBtn.addEventListener('click', () => {
-      const targetId = peerIdInput.value.trim();
-      if (!targetId) return alert('Enter a Peer ID first.');
-
-      // Start video call
-      const call = peer.call(targetId, localStream);
-      call.on('stream', remoteStream => {
-        remoteVideo.srcObject = remoteStream;
-      });
-
-      // Start text chat connection
-      dataConn = peer.connect(targetId);
-      bindChatEvents();
-    });
-
-    // Send/Receive Chat Handlers
-    function bindChatEvents() {
-      dataConn.on('data', data => appendMessage(data, 'them'));
+    async function init() {
+      try {
+        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        localVideo.srcObject = localStream;
+        nextBtn.disabled = false;
+        joinLobby();
+      } catch (err) {
+        statusText.textContent = 'Status: Camera/Mic access required!';
+      }
     }
 
-    sendBtn.addEventListener('click', sendMessage);
-    msgInput.addEventListener('keypress', E => { if (E.key === 'Enter'l) sendMessage(); });
+    function joinLobby() {
+      resetMatch();
+      statusText.textContent = 'Status: Searching for partner...';
 
-    function sendMessage() {
+      lobbyRoom = joinRoom(config, LOBBY_ROOM);
+      const [sendInvite, getInvite] = lobbyRoom.makeAction('invite');
+      
+      lobbyRoom.onPeerJoin = (peerId) => {
+        if (selfId > peerId) {
+          const privateRoomId = `room-${selfId}-${peerId}-${Date.now()}`;
+          sendInvite(privateRoomId, peerId);
+          connectToPrivateRoom(privateRoomId);
+        }
+      };
+
+      getInvite((privateRoomId) => {
+        connectToPrivateRoom(privateRoomId);
+      });
+    }
+
+    function connectToPrivateRoom(roomId) {
+      if (lobbyRoom) {
+        lobbyRoom.leave();
+        lobbyRoom = null;
+      }
+
+      statusText.textContent = 'Status: Connected!';
+      enableChat(true);
+
+      currentRoom = joinRoom(config, roomId);
+      currentRoom.addStream(localStream);
+
+      currentRoom.onPeerStream((stream) => {
+        remoteVideo.srcObject = stream;
+      });
+
+      currentRoom.onPeerLeave = () => {
+        statusText.textContent = 'Status: Partner disconnected.';
+        remoteVideo.srcObject = null;
+        enableChat(false);
+      };
+
+      const [sendMessageAction, receiveMessage] = currentRoom.makeAction('chat');
+      sendMsg = sendMessageAction;
+
+      receiveMessage((data) => {
+        appendMessage(data, 'them');
+      });
+    }
+
+    function resetMatch() {
+      if (currentRoom) {
+        currentRoom.leave();
+        currentRoom = null;
+      }
+      remoteVideo.srcObject = null;
+      sendMsg = null;
+      messagesEl.innerHTML = '';
+      enableChat(false);
+    }
+
+    function enableChat(enabled) {
+      msgInput.disabled = !enabled;
+      sendBtn.disabled = !enabled;
+    }
+
+    nextBtn.addEventListener('click', joinLobby);
+    sendBtn.addEventListener('click', sendTextMessage);
+    msgInput.addEventListener('keypress', (E) => { if (E.key === 'Enter') sendTextMessage(); });
+
+    function sendTextMessage() {
       const text = msgInput.value.trim();
-      if (!text || !dataConn) return;
-      dataConn.send(text);
+      if (!text || !sendMsg) return;
+      sendMsg(text);
       appendMessage(text, 'me');
       msgInput.value = '';
     }
@@ -148,6 +181,8 @@
       messagesEl.appendChild(msgDiv);
       messagesEl.scrollTop = messagesEl.scrollHeight;
     }
+
+    init();
   </script>
 </body>
 </html>
