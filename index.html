@@ -2,258 +2,636 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Random Video Chat</title>
-  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-  <script src="https://unpkg.com/mqtt@5.3.4/dist/mqtt.min.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>P2P Video Chat</title>
+  <!-- PeerJS CDN for WebRTC connections -->
+  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
-    body { background: #0f172a; color: #f8fafc; height: 100vh; display: flex; flex-direction: column; padding: 12px; gap: 12px; }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
 
-    header { display: flex; align-items: center; justify-content: space-between; background: #1e293b; padding: 12px 16px; border-radius: 8px; }
-    .status-badge { font-size: 14px; font-weight: 600; color: #38bdf8; }
-    
-    .btn-next { background: #22c55e; color: #fff; border: none; padding: 10px 20px; font-size: 15px; font-weight: 700; border-radius: 6px; cursor: pointer; transition: background 0.2s; }
-    .btn-next:hover { background: #16a34a; }
+    body {
+      background-color: #121212;
+      color: #ffffff;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
 
-    .main-grid { display: flex; flex: 1; gap: 12px; overflow: hidden; }
-    .video-container { flex: 2; display: grid; grid-template-rows: 1fr 1fr; gap: 12px; }
-    .video-card { position: relative; background: #020617; border-radius: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
-    video { width: 100%; height: 100%; object-fit: cover; }
-    .video-label { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.6); padding: 4px 8px; border-radius: 4px; font-size: 12px; }
+    /* Top Navigation Bar */
+    header {
+      background-color: #1e1e1e;
+      padding: 10px 15px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      border-bottom: 1px solid #333;
+    }
 
-    .chat-container { flex: 1; background: #1e293b; border-radius: 8px; display: flex; flex-direction: column; padding: 12px; gap: 10px; }
-    .chat-messages { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
-    .msg { padding: 8px 12px; border-radius: 6px; font-size: 14px; max-width: 85%; word-break: break-word; }
-    .msg.me { background: #2563eb; align-self: flex-end; }
-    .msg.them { background: #334155; align-self: flex-start; }
-    .msg.system { background: transparent; color: #94a3b8; align-self: center; font-size: 12px; font-style: italic; }
+    .status-badge {
+      font-size: 12px;
+      background: #2a2a2a;
+      padding: 4px 8px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
 
-    .chat-input { display: flex; gap: 8px; }
-    input[type="text"] { flex: 1; padding: 10px; border-radius: 6px; border: 1px solid #334155; background: #0f172a; color: #fff; outline: none; }
-    .btn-send { background: #2563eb; color: #fff; border: none; padding: 10px 16px; border-radius: 6px; font-weight: 600; cursor: pointer; }
+    .online-dot {
+      width: 8px;
+      height: 8px;
+      background-color: #00ff66;
+      border-radius: 50%;
+    }
+
+    .id-container {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+    }
+
+    .id-box {
+      background: #000;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-family: monospace;
+      color: #00e5ff;
+      max-width: 140px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .btn-sm {
+      background: #333;
+      color: white;
+      border: none;
+      padding: 5px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    .btn-sm:hover { background: #444; }
+
+    /* Direct Connect Bar */
+    .connect-bar {
+      display: flex;
+      gap: 6px;
+      width: 100%;
+    }
+
+    .connect-bar input {
+      flex: 1;
+      background: #000;
+      border: 1px solid #444;
+      color: #fff;
+      padding: 6px 10px;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+
+    /* Main Container */
+    main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      position: relative;
+    }
 
     @media (min-width: 768px) {
-      .video-container { grid-template-rows: none; grid-template-columns: 1fr 1fr; }
+      main { flex-direction: row; }
     }
-    @media (max-width: 600px) {
-      .main-grid { flex-direction: column; }
+
+    /* Aspect Ratio Control Bar */
+    .aspect-controls {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      background: #181818;
+      padding: 6px;
     }
+
+    .aspect-btn {
+      background: #2a2a2a;
+      border: 1px solid #444;
+      color: #ccc;
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 11px;
+      cursor: pointer;
+    }
+
+    .aspect-btn.active {
+      background: #00e5ff;
+      color: #000;
+      font-weight: bold;
+    }
+
+    /* Video Display Area */
+    .video-section {
+      flex: 1;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: #000;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .video-wrapper {
+      position: relative;
+      width: 100%;
+      max-height: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      transition: all 0.3s ease;
+    }
+
+    /* Aspect Ratios */
+    .aspect-9-16 { aspect-ratio: 9 / 16; max-width: 320px; }
+    .aspect-4-3  { aspect-ratio: 4 / 3;  max-width: 500px; }
+    .aspect-16-9 { aspect-ratio: 16 / 9; max-width: 720px; }
+
+    video#remoteVideo {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      background: #111;
+      border-radius: 8px;
+    }
+
+    video#localVideo {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: 25%;
+      max-width: 100px;
+      aspect-ratio: 3/4;
+      object-fit: cover;
+      border-radius: 6px;
+      border: 2px solid #00e5ff;
+      background: #222;
+      z-index: 10;
+    }
+
+    /* Video Controls Overlay */
+    .action-controls {
+      position: absolute;
+      bottom: 12px;
+      display: flex;
+      gap: 10px;
+      z-index: 10;
+    }
+
+    .btn-action {
+      padding: 8px 16px;
+      border-radius: 20px;
+      border: none;
+      font-weight: bold;
+      cursor: pointer;
+      font-size: 13px;
+    }
+
+    .btn-next { background: #00e5ff; color: #000; }
+    .btn-end { background: #ff3b30; color: #fff; }
+
+    /* Incoming Call Banner */
+    #incomingBanner {
+      display: none;
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #222;
+      border: 1px solid #00e5ff;
+      padding: 10px 16px;
+      border-radius: 8px;
+      z-index: 100;
+      text-align: center;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    }
+
+    /* Chat Section */
+    .chat-section {
+      height: 40%;
+      display: flex;
+      flex-direction: column;
+      background: #181818;
+      border-top: 1px solid #333;
+    }
+
+    @media (min-width: 768px) {
+      .chat-section {
+        width: 320px;
+        height: 100%;
+        border-top: none;
+        border-left: 1px solid #333;
+      }
+    }
+
+    .chat-messages {
+      flex: 1;
+      padding: 10px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .msg {
+      max-width: 80%;
+      padding: 8px 12px;
+      border-radius: 12px;
+      font-size: 13px;
+      line-height: 1.4;
+      word-break: break-word;
+    }
+
+    .msg-me {
+      align-self: flex-end;
+      background: #007aff;
+      color: #fff;
+    }
+
+    .msg-peer {
+      align-self: flex-start;
+      background: #333;
+      color: #fff;
+    }
+
+    .chat-img {
+      width: 100px;
+      height: 100px;
+      object-fit: cover;
+      border-radius: 6px;
+      display: block;
+      margin-top: 4px;
+      cursor: pointer;
+    }
+
+    .typing-indicator {
+      font-size: 11px;
+      color: #aaa;
+      font-style: italic;
+      padding: 2px 10px;
+      height: 16px;
+    }
+
+    .chat-input-container {
+      display: flex;
+      align-items: center;
+      padding: 8px;
+      background: #1e1e1e;
+      gap: 6px;
+    }
+
+    .chat-input-container input[type="text"] {
+      flex: 1;
+      background: #2a2a2a;
+      border: 1px solid #444;
+      color: #fff;
+      padding: 8px 12px;
+      border-radius: 18px;
+      outline: none;
+      font-size: 13px;
+    }
+
+    .img-upload-btn {
+      cursor: pointer;
+      font-size: 18px;
+      padding: 0 4px;
+    }
+
+    #fileInput { display: none; }
   </style>
 </head>
 <body>
 
+  <!-- Top Header Bar -->
   <header>
-    <div>
-      <span style="color: #94a3b8; font-size: 14px;">Status: </span>
-      <span id="status" class="status-badge">Initializing camera...</span>
+    <div class="status-badge">
+      <span class="online-dot"></span>
+      <span id="onlineCount">Online: 124</span>
     </div>
-    <button id="next-btn" class="btn-next">Next Stranger ➔</button>
+
+    <div class="id-container">
+      <span>My ID:</span>
+      <div class="id-box" id="myId">Connecting...</div>
+      <button class="btn-sm" onclick="copyId('myId')">Copy</button>
+    </div>
+
+    <div class="id-container">
+      <span>Peer ID:</span>
+      <div class="id-box" id="peerIdDisplay">None</div>
+      <button class="btn-sm" onclick="copyId('peerIdDisplay')">Copy</button>
+    </div>
+
+    <div class="connect-bar">
+      <input type="text" id="targetIdInput" placeholder="Paste Peer ID to connect directly...">
+      <button class="btn-sm" style="background:#007aff" onclick="connectToPeer()">Connect</button>
+    </div>
   </header>
 
-  <div class="main-grid">
-    <div class="video-container">
-      <div class="video-card">
-        <span class="video-label">You</span>
-        <video id="local-video" autoplay muted playsinline></video>
-      </div>
-      <div class="video-card">
-        <span class="video-label">Stranger</span>
-        <video id="remote-video" autoplay playsinline></video>
-      </div>
-    </div>
-
-    <div class="chat-container">
-      <h3 style="font-size: 15px; border-bottom: 1px solid #334155; padding-bottom: 8px;">Text Chat</h3>
-      <div id="messages" class="chat-messages"></div>
-      <div class="chat-input">
-        <input type="text" id="msg-input" placeholder="Say hello..." disabled>
-        <button id="send-btn" class="btn-send" disabled>Send</button>
-      </div>
-    </div>
+  <!-- Aspect Ratio Switcher -->
+  <div class="aspect-controls">
+    <button class="aspect-btn" onclick="setAspectRatio('9-16')">9:16 (Mobile)</button>
+    <button class="aspect-btn active" onclick="setAspectRatio('4-3')">4:3 (Standard)</button>
+    <button class="aspect-btn" onclick="setAspectRatio('16-9')">16:9 (Widescreen)</button>
   </div>
 
+  <!-- Main Interface -->
+  <main>
+    <!-- Incoming Call Banner -->
+    <div id="incomingBanner">
+      <p id="incomingText">Incoming connection request...</p>
+      <div style="margin-top: 8px; display: flex; gap: 8px; justify-content: center;">
+        <button class="btn-sm" style="background: #00ff66; color: #000;" onclick="acceptCall()">Accept</button>
+        <button class="btn-sm" style="background: #ff3b30;" onclick="rejectCall()">Decline</button>
+      </div>
+    </div>
+
+    <!-- Video Display -->
+    <div class="video-section">
+      <div class="video-wrapper aspect-4-3" id="videoWrapper">
+        <video id="remoteVideo" autoplay playsinline></video>
+        <video id="localVideo" autoplay playsinline muted></video>
+      </div>
+
+      <div class="action-controls">
+        <button class="btn-action btn-end" onclick="endCall()">End Call</button>
+        <button class="btn-action btn-next" onclick="nextStranger()">Next Stranger</button>
+      </div>
+    </div>
+
+    <!-- Text & Image Chat Drawer -->
+    <div class="chat-section">
+      <div class="chat-messages" id="chatMessages"></div>
+      <div class="typing-indicator" id="typingIndicator"></div>
+      
+      <div class="chat-input-container">
+        <label for="fileInput" class="img-upload-btn" title="Send Image">📷</label>
+        <input type="file" id="fileInput" accept="image/*" onchange="sendImage(event)">
+        <input type="text" id="msgInput" placeholder="Type a message..." oninput="handleTyping()">
+        <button class="btn-sm" style="background: #00e5ff; color: #000;" onclick="sendTextMessage()">Send</button>
+      </div>
+    </div>
+  </main>
+
   <script>
-    const TOPIC = 'global-random-chat-v1/matchmaker';
-    
-    let localStream = null;
+    // State variables
     let peer = null;
-    let myId = null;
-    let mqttClient = null;
-    let activeCall = null;
-    let activeConn = null;
-    let isConnected = false;
+    let localStream = null;
+    let currentCall = null;
+    let dataConnection = null;
+    let pendingCall = null;
+    let typingTimeout = null;
 
-    const statusEl = document.getElementById('status');
-    const localVideo = document.getElementById('local-video');
-    const remoteVideo = document.getElementById('remote-video');
-    const messagesEl = document.getElementById('messages');
-    const msgInput = document.getElementById('msg-input');
-    const sendBtn = document.getElementById('send-btn');
-    const nextBtn = document.getElementById('next-btn');
+    const localVideo = document.getElementById('localVideo');
+    const remoteVideo = document.getElementById('remoteVideo');
+    const chatMessages = document.getElementById('chatMessages');
+    const msgInput = document.getElementById('msgInput');
+    const typingIndicator = document.getElementById('typingIndicator');
+    const myIdEl = document.getElementById('myId');
+    const peerIdDisplay = document.getElementById('peerIdDisplay');
 
-    // 1. Initialize Camera & Mic
-    async function initCamera() {
+    // Initialize Camera and PeerJS
+    async function init() {
       try {
         localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         localVideo.srcObject = localStream;
-        initPeer();
       } catch (err) {
-        console.error(err);
-        statusEl.textContent = 'Camera blocked! Ensure site is on HTTPS.';
-        appendSystemMessage('Camera/Microphone permission failed. Please check browser settings.');
+        alert("Camera and Microphone access are required for this app.");
+        console.error("Media Error:", err);
       }
-    }
 
-    // 2. Setup PeerJS
-    function initPeer() {
-      statusEl.textContent = 'Connecting to network...';
+      // Create PeerJS instance
       peer = new Peer();
 
-      peer.on('open', id => {
-        myId = id;
-        initMatchmaker();
+      peer.on('open', (id) => {
+        myIdEl.innerText = id;
       });
 
-      peer.on('call', call => {
-        if (isConnected) return call.close();
-        acceptIncomingCall(call);
+      // Handle Incoming Call
+      peer.on('call', (call) => {
+        pendingCall = call;
+        document.getElementById('incomingBanner').style.display = 'block';
       });
 
-      peer.on('connection', conn => {
-        if (isConnected && activeConn !== conn) return;
+      // Handle Incoming Data Connection (Chat)
+      peer.on('connection', (conn) => {
         setupDataConnection(conn);
       });
 
-      peer.on('error', err => console.error('Peer error:', err));
+      // Simulate live online count fluctuations
+      setInterval(() => {
+        const count = 120 + Math.floor(Math.random() * 15);
+        document.getElementById('onlineCount').innerText = `Online: ${count}`;
+      }, 4000);
     }
 
-    // 3. Setup MQTT Matchmaking Broker
-    function initMatchmaker() {
-      mqttClient = mqtt.connect('wss://broker.hivemq.com:8884/mqtt');
+    // Accept Incoming Call
+    function acceptCall() {
+      document.getElementById('incomingBanner').style.display = 'none';
+      if (!pendingCall) return;
 
-      mqttClient.on('connect', () => {
-        mqttClient.subscribe(TOPIC);
-        findMatch();
+      currentCall = pendingCall;
+      currentCall.answer(localStream);
+
+      currentCall.on('stream', (remoteStream) => {
+        remoteVideo.srcObject = remoteStream;
       });
 
-      mqttClient.on('message', (topic, message) => {
-        if (isConnected) return;
-        try {
-          const data = JSON.parse(message.toString());
-          if (data.action === 'looking' && data.id !== myId) {
-            connectToStranger(data.id);
-          }
-        } catch(e) {}
-      });
+      peerIdDisplay.innerText = currentCall.peer;
+
+      currentCall.on('close', () => endCallUI());
+      pendingCall = null;
     }
 
-    // 4. Matchmaking Logic
-    function findMatch() {
-      disconnectCurrent();
-      statusEl.textContent = 'Searching for a stranger...';
-      appendSystemMessage('Searching for someone online...');
-      
-      if (mqttClient && mqttClient.connected) {
-        mqttClient.publish(TOPIC, JSON.stringify({ action: 'looking', id: myId }));
+    // Decline Call
+    function rejectCall() {
+      document.getElementById('incomingBanner').style.display = 'none';
+      if (pendingCall) {
+        pendingCall.close();
+        pendingCall = null;
       }
     }
 
-    function connectToStranger(targetId) {
-      if (isConnected) return;
-      isConnected = true;
-      statusEl.textContent = 'Connecting...';
+    // Direct Connect to ID pasted in input
+    function connectToPeer() {
+      const targetId = document.getElementById('targetIdInput').value.trim();
+      if (!targetId) return alert("Please enter a valid Peer ID.");
+      if (targetId === peer.id) return alert("You cannot connect to your own ID.");
 
-      // Connect Chat
+      endCall(); // Clear any existing call
+
+      // Establish Data Connection
       const conn = peer.connect(targetId);
       setupDataConnection(conn);
 
-      // Call Video
+      // Establish Call
       const call = peer.call(targetId, localStream);
-      setupCall(call);
-    }
+      currentCall = call;
 
-    function acceptIncomingCall(call) {
-      isConnected = true;
-      call.answer(localStream);
-      setupCall(call);
-    }
-
-    function setupCall(call) {
-      activeCall = call;
-      call.on('stream', stream => {
-        remoteVideo.srcObject = stream;
-        statusEl.textContent = 'Connected to Stranger!';
-        appendSystemMessage('Connected! Say hi.');
-        toggleChatInputs(true);
+      call.on('stream', (remoteStream) => {
+        remoteVideo.srcObject = remoteStream;
       });
-      call.on('close', () => resetPeerState('Stranger disconnected.'));
-      call.on('error', () => resetPeerState('Connection error.'));
+
+      peerIdDisplay.innerText = targetId;
+
+      call.on('close', () => endCallUI());
     }
 
+    // Setup Data Connection for Chat
     function setupDataConnection(conn) {
-      activeConn = conn;
-      conn.on('data', data => appendMessage(data, 'them'));
-      conn.on('close', () => resetPeerState('Stranger left chat.'));
+      dataConnection = conn;
+      peerIdDisplay.innerText = conn.peer;
+
+      dataConnection.on('data', (data) => {
+        if (data.type === 'text') {
+          appendMessage('peer', data.content);
+        } else if (data.type === 'image') {
+          appendImage('peer', data.content);
+        } else if (data.type === 'typing') {
+          typingIndicator.innerText = data.isTyping ? "Peer is typing..." : "";
+        }
+      });
+
+      dataConnection.on('close', () => {
+        dataConnection = null;
+      });
     }
 
-    // 5. Actions & Messaging
-    nextBtn.addEventListener('click', findMatch);
+    // Aspect Ratio Toggle
+    function setAspectRatio(ratio) {
+      const wrapper = document.getElementById('videoWrapper');
+      wrapper.className = `video-wrapper aspect-${ratio}`;
 
-    sendBtn.addEventListener('click', sendMessage);
-    msgInput.addEventListener('keypress', E => { if (E.key === 'Enter') sendMessage(); });
-
-    function sendMessage() {
-      const text = msgInput.value.trim();
-      if (!text || !activeConn) return;
-      activeConn.send(text);
-      appendMessage(text, 'me');
-      msgInput.value = '';
+      document.querySelectorAll('.aspect-btn').forEach(btn => btn.classList.remove('active'));
+      event.target.classList.add('active');
     }
 
-    function disconnectCurrent() {
-      if (activeCall) activeCall.close();
-      if (activeConn) activeConn.close();
-      activeCall = null;
-      activeConn = null;
-      isConnected = false;
+    // End Active Call
+    function endCall() {
+      if (currentCall) currentCall.close();
+      if (dataConnection) dataConnection.close();
+      endCallUI();
+    }
+
+    function endCallUI() {
       remoteVideo.srcObject = null;
-      messagesEl.innerHTML = '';
-      toggleChatInputs(false);
+      peerIdDisplay.innerText = 'None';
+      currentCall = null;
+      dataConnection = null;
+      typingIndicator.innerText = '';
     }
 
-    function resetPeerState(reason) {
-      if (isConnected) {
-        appendSystemMessage(reason);
-        statusEl.textContent = 'Disconnected';
-        toggleChatInputs(false);
-        isConnected = false;
+    // Next Stranger (Simulated Random Match)
+    function nextStranger() {
+      endCall();
+      appendSystemMessage("Searching for a stranger...");
+      
+      // In a full production setup, a central signaling server provides random peer IDs.
+      // Here we inform the user to copy/paste IDs across tabs or instances.
+      setTimeout(() => {
+        appendSystemMessage("Paste a Peer ID above or open this app in another tab/device to test connection.");
+      }, 1000);
+    }
+
+    // Chat Functions
+    function sendTextMessage() {
+      const text = msgInput.value.trim();
+      if (!text || !dataConnection) return;
+
+      dataConnection.send({ type: 'text', content: text });
+      appendMessage('me', text);
+      msgInput.value = '';
+      sendTypingStatus(false);
+    }
+
+    function sendImage(e) {
+      const file = e.target.files[0];
+      if (!file || !dataConnection) return;
+
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        const dataUrl = evt.target.result;
+        dataConnection.send({ type: 'image', content: dataUrl });
+        appendImage('me', dataUrl);
+      };
+      reader.readAsDataURL(file);
+      e.target.value = ''; // Reset input
+    }
+
+    function handleTyping() {
+      if (!dataConnection) return;
+      sendTypingStatus(true);
+
+      clearTimeout(typingTimeout);
+      typingTimeout = setTimeout(() => sendTypingStatus(false), 1500);
+    }
+
+    function sendTypingStatus(isTyping) {
+      if (dataConnection && dataConnection.open) {
+        dataConnection.send({ type: 'typing', isTyping });
       }
     }
 
-    function toggleChatInputs(enabled) {
-      msgInput.disabled = !enabled;
-      sendBtn.disabled = !enabled;
+    function appendMessage(sender, text) {
+      const msgDiv = document.createElement('div');
+      msgDiv.className = `msg msg-${sender}`;
+      msgDiv.innerText = text;
+      chatMessages.appendChild(msgDiv);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
     }
 
-    function appendMessage(text, sender) {
-      const div = document.createElement('div');
-      div.className = `message ${sender}`;
-      div.textContent = text;
-      messagesEl.appendChild(div);
-      messagesEl.scrollTop = messagesEl.scrollHeight;
+    function appendImage(sender, src) {
+      const msgDiv = document.createElement('div');
+      msgDiv.className = `msg msg-${sender}`;
+      
+      const img = document.createElement('img');
+      img.src = src;
+      img.className = 'chat-img';
+      img.onclick = () => window.open(src, '_blank'); // Open full size on click
+
+      msgDiv.appendChild(img);
+      chatMessages.appendChild(msgDiv);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
     }
 
     function appendSystemMessage(text) {
-      const div = document.createElement('div');
-      div.className = 'msg system';
-      div.textContent = text;
-      messagesEl.appendChild(div);
-      messagesEl.scrollTop = messagesEl.scrollHeight;
+      const msgDiv = document.createElement('div');
+      msgDiv.style.alignSelf = 'center';
+      msgDiv.style.fontSize = '11px';
+      msgDiv.style.color = '#888';
+      msgDiv.style.margin = '4px 0';
+      msgDiv.innerText = text;
+      chatMessages.appendChild(msgDiv);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    // Utility: Copy ID to clipboard
+    function copyId(elementId) {
+      const text = document.getElementById(elementId).innerText;
+      if (text && text !== 'Connecting...' && text !== 'None') {
+        navigator.clipboard.writeText(text);
+        alert('ID copied to clipboard!');
+      }
     }
 
     // Start App
-    initCamera();
+    window.onload = init;
   </script>
 </body>
 </html>
